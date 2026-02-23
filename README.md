@@ -44,4 +44,4 @@ struct MyAPIProtocolImpl: APIProtocol {
 
 [docs-generator]: https://swiftpackageindex.com/apple/swift-openapi-generator/documentation
 [swift-dependencies]: https://github.com/pointfreeco/swift-dependencies
-[request-injection-tutorial]: https://swiftpackageindex.com/swift-server/swift-openapi-vapor/1.0.1/tutorials/swift-openapi-vapor/requestinjection
+[request-injection-tutorial]: https://swiftpackageindex.com/vapor/swift-openapi-vapor/1.0.1/tutorials/swift-openapi-vapor/requestinjection

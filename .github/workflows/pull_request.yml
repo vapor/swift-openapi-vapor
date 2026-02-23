@@ -3,6 +3,8 @@ name: PR
 on:
   pull_request:
     types: [opened, reopened, synchronize]
+permissions:
+  contents: read
 
 jobs:
   soundness:

@@ -33,9 +33,10 @@ public final class VaporTransport {
 
 extension VaporTransport: ServerTransport {
   public func register(
-    _ handler: @Sendable @escaping (
-      HTTPTypes.HTTPRequest, OpenAPIRuntime.HTTPBody?, OpenAPIRuntime.ServerRequestMetadata
-    ) async throws -> (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?),
+    _ handler:
+      @Sendable @escaping (
+        HTTPTypes.HTTPRequest, OpenAPIRuntime.HTTPBody?, OpenAPIRuntime.ServerRequestMetadata
+      ) async throws -> (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?),
     method: HTTPRequest.Method,
     path: String
   ) throws {

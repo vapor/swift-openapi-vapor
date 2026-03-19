@@ -1,4 +1,3 @@
-import Dependencies
 import Vapor
 
 struct OpenAPIRequestInjectionMiddleware: AsyncMiddleware {

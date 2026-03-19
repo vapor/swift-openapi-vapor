@@ -1,47 +1,31 @@
-@Tutorial(time: 10) {
+@Tutorial(time: 5) {
     @XcodeRequirement(title: "Swift 5.9", destination: "https://developer.apple.com/download/applications/")
 
     @Intro(title: "Using `Request` in OpenAPI's APIProtocol") {
         This tutorial guides you through passing down the `Request` to the OpenAPI Vapor route handler
     }
-    
-    @Section(title: "Adding the `swift-dependencies` library as a dependency of your app") {
-        This tutorial uses [swift-dependencies](https://github.com/pointfreeco/swift-dependencies) to inject the `Request` to the context of `APIProtocol`, using `TaskLocal` values.
-        
+
+    @Section(title: "Setting up a `@TaskLocal` for the request") {
+        You need to create a `@TaskLocal` value in a global or static scope so we can use it to hold the `Request`.
+
         @Steps {
             @Step {
-                Make sure you add [swift-dependencies](https://github.com/pointfreeco/swift-dependencies) as a dependency of your app, as well as your target. See [this section](https://github.com/pointfreeco/swift-dependencies?tab=readme-ov-file#installation) for more info.
+                Create a `@TaskLocal` variable for the `Request` value.
+                @Code(name: "CurrentContext", file: request-injection-currentcontext.swift, reset: true)
             }
         }
     }
-    
-    @Section(title: "Adding `request` to `DependencyValues`") {
-        You need to add a `request` variable as an extension on top of `DependencyValues` so in the next steps we can store each `Request` there. 
-        
-        @Steps {
-            @Step {
-                Create a `DependencyKey` for the `Request` value.
-                @Code(name: "+DependencyValues", file: request-injection.dependency-values.1.swift, reset: true)
-            }
-            @Step {
-                Add a `request` variable while using the `RequestKey` as the identifier to access `DependencyValues`'s underlying storage.
-                @Code(name: "+DependencyValues", file: request-injection.dependency-values.2.swift)
-            }
-        }
-        
-        If you want to know more about how `swift-dependencies` works, refer to their [documentation](https://github.com/pointfreeco/swift-dependencies#documentation).
-    }
-    
+
     @Section(title: "Using a middleware to inject `Request` to the context of requests") {
-        Now you need to using an `AsyncMiddleware` which captures the request and injects it to the context of your requests using Swift's `TaskLocal`s. 
-        
+        Now you need to using an `AsyncMiddleware` which captures the request and injects it to the context of your requests using Swift's `TaskLocal`s.
+
         @Steps {
             @Step {
                Create an `AsyncMiddleware`.
                @Code(name: "OpenAPIRequestInjectionMiddleware", file: request-injection.middleware.1.swift)
             }
             @Step {
-               Use `swift-dependencies` APIs to inject the `request` to the context of the request.
+               Use `TaskLocal.withValue(_:)` to inject the `request` value to the context of the request.
                @Code(name: "OpenAPIRequestInjectionMiddleware", file: request-injection.middleware.2.swift)
             }
             @Step {
@@ -51,15 +35,15 @@
             }
             @Step {
                 Change it so you're using the new `OpenAPIRequestInjectionMiddleware`.
-                Prefer to use this middleware as the last middleware for your routes, to avoid possible known problems with `TaskLocal` and Vapor's underlying implementation. 
+                Prefer to use this middleware as the last middleware for your routes, to avoid possible known problems with `@TaskLocal` and Vapor's underlying implementation.
                 @Code(name: "register-openapi-handler.swift", file: request-injection.using-middleware.2.swift)
             }
         }
     }
-    
+
     @Section(title: "Using `request` in your OpenAPI handler") {
         Everything is now ready! You can use the `request` dependency value from your OpenAPI handler.
-        
+
         @Steps {
             @Step {
                 Navigate to your APIProtocol implementation file.
@@ -67,7 +51,7 @@
                 @Code(name: "MyAPIProtocolImpl.swift", file: request-injection.api-protocol.1.swift)
             }
             @Step {
-                Use `swift-dependencies` APIs to retrieve the `Request`.
+                Access the value of the `@TaskLocal` to retrieve the `Request`.
                 Then you can use it freely like with normal Vapor route handlers.
                 @Code(name: "MyAPIProtocolImpl.swift", file: request-injection.api-protocol.2.swift)
             }

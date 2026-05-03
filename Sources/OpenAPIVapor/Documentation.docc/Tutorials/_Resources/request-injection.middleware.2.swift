@@ -1,4 +1,3 @@
-import Dependencies
 import Vapor
 
 struct OpenAPIRequestInjectionMiddleware: AsyncMiddleware {
@@ -6,9 +5,7 @@ struct OpenAPIRequestInjectionMiddleware: AsyncMiddleware {
     to request: Request,
     chainingTo responder: AsyncResponder
   ) async throws -> Response {
-    try await withDependencies {
-      $0.request = request
-    } operation: {
+    try await CurrentContext.$request.withValue(request) {
       try await responder.respond(to: request)
     }
   }

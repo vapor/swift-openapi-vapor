@@ -1,0 +1,23 @@
+{
+  "theme": {
+    "aside": { "border-radius": "16px", "border-width": "3px", "border-style": "double" },
+    "border-radius": "0",
+    "button": { "border-radius": "16px", "border-width": "1px", "border-style": "solid" },
+    "code":   { "border-radius": "16px", "border-width": "1px", "border-style": "solid" },
+    "color": {
+      "generic": { "dark": "hsl(258 100% 58%)", "light": "hsl(258 100% 78%)" },
+      "documentation-intro-fill": {
+        "dark": "radial-gradient(circle at top, #93d500 10%, #6ba43a 30%, #4d5a31 50%, #424143 70%, #0c0c0c 100%)",
+        "light": "radial-gradient(circle at top, #424143 10%, #4d5a31 30%, #6ba43a 50%, #93d500 70%, #f9f9f9 100%)"
+      },
+      "documentation-intro-accent": "var(--color-generic)",
+      "logo-base":  { "dark": "#fff", "light": "#000" },
+      "logo-shape": { "dark": "#000", "light": "#fff" },
+      "fill":       { "dark": "#000", "light": "#fff" }
+    },
+  },
+  "features": {
+    "quickNavigation": { "enable": true },
+    "i18n": { "enable": true }
+  }
+}

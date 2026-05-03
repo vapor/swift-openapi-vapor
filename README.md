@@ -23,19 +23,21 @@ try handler.registerHandlers(on: transport)
 
 To get started, check out the full [documentation][docs-generator], which contains step-by-step tutorials!
 
-Additionally, see the [request injection tutorial][request-injection-tutorial] to learn how you can use [swift-dependencies] to inject `Request` into `APIProtocol`:
+Additionally, see the [request injection tutorial][request-injection-tutorial] to learn how to inject `Request` into `APIProtocol`:
 
 ```swift
+struct CurrentContext {
+    @TaskLocal
+    static var request: Request? = nil
+}
+
 struct MyAPIProtocolImpl: APIProtocol {
-    @Dependency(\.request) var request
-
-
     func myOpenAPIEndpointFunction() async throws -> Operations.myOperation.Output {
         /// Use `request` as if this is a normal Vapor endpoint function
-        request.logger.notice(
+        CurrentContext.request?.logger.notice(
             "Got a request!",
             metadata: [
-                "request": .stringConvertible(request)
+                "request": .stringConvertible(CurrentContext.request)
             ]
         )
     }
@@ -43,5 +45,4 @@ struct MyAPIProtocolImpl: APIProtocol {
 ```
 
 [docs-generator]: https://swiftpackageindex.com/apple/swift-openapi-generator/documentation
-[swift-dependencies]: https://github.com/pointfreeco/swift-dependencies
 [request-injection-tutorial]: https://swiftpackageindex.com/vapor/swift-openapi-vapor/1.0.1/tutorials/swift-openapi-vapor/requestinjection

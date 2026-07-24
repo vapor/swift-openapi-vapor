@@ -12,9 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 import Atomics
-import Foundation
 import HTTPTypes
-import NIOFoundationCompat
 import NIOHTTPTypesHTTP1
 import OpenAPIRuntime
 import Vapor

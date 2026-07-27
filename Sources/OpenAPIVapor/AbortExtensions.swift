@@ -18,6 +18,7 @@ import NIOHTTPTypesHTTP1
 
 // This @retroactive conformance is okay as it assumes that Vapor v4 will never gain
 // a direct dependency on Swift OpenAPI Runtime.
+// swift-format-ignore: AvoidRetroactiveConformances
 extension Abort: @retroactive HTTPResponseConvertible {
     public var httpStatus: HTTPResponse.Status {
         .init(code: Int(status.code))

@@ -18,19 +18,23 @@ import XCTVapor
 @testable import OpenAPIVapor
 
 final class AbortExtensionsTests: XCTestCase {
-    func testConversion() async throws {
-        let error = Abort(.unauthorized) as any HTTPResponseConvertible
-        XCTAssertEqual(error.httpStatus, .unauthorized)
-        XCTAssertEqual(error.httpHeaderFields, [
-            .contentType: "application/json"
-        ])
-        let body = try XCTUnwrap(error.httpBody)
-        let bodyString = try await String(collecting: body, upTo: 1024)
-        XCTAssertEqual(bodyString, """
-        {
-          "status" : 401,
-          "title" : "401: Unauthorized"
-        }
-        """)
-    }
+  func testConversion() async throws {
+    let error = Abort(.unauthorized) as any HTTPResponseConvertible
+    XCTAssertEqual(error.httpStatus, .unauthorized)
+    XCTAssertEqual(
+      error.httpHeaderFields,
+      [
+        .contentType: "application/json"
+      ])
+    let body = try XCTUnwrap(error.httpBody)
+    let bodyString = try await String(collecting: body, upTo: 1024)
+    XCTAssertEqual(
+      bodyString,
+      """
+      {
+        "status" : 401,
+        "title" : "401: Unauthorized"
+      }
+      """)
+  }
 }

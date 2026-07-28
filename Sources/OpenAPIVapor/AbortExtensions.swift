@@ -35,19 +35,21 @@ extension Abort: @retroactive HTTPResponseConvertible {
       title: "\(identifier): \(reason)",
       status: Int(status.code)
     )
-    guard let data = try? jsonEncoder.encode(problem) else {
+    guard let encoder = try? ContentConfiguration.global.requireEncoder(for: .json) else {
+      // We don't have a great place to communicate a missing encoder here.
+      return nil
+    }
+    var buffer = ByteBuffer()
+    var headers = HTTPHeaders()
+    do {
+      try encoder.encode(problem, to: &buffer, headers: &headers)
+    } catch {
       // We don't have a great place to communicate an encoding error here.
       return nil
     }
-    return .init(data)
+    return .init(buffer.readableBytesView)
   }
 }
-
-private let jsonEncoder: JSONEncoder = {
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
-  return encoder
-}()
 
 // https://datatracker.ietf.org/doc/html/rfc7807#section-3.1
 private struct JSONProblem: Encodable {

@@ -28,13 +28,13 @@ final class AbortExtensionsTests: XCTestCase {
       ])
     let body = try XCTUnwrap(error.httpBody)
     let bodyString = try await String(collecting: body, upTo: 1024)
+    struct ExpectedValue: Decodable, Equatable {
+      var status: Int
+      var title: String
+    }
     XCTAssertEqual(
-      bodyString,
-      """
-      {
-        "status" : 401,
-        "title" : "401: Unauthorized"
-      }
-      """)
+      try JSONDecoder().decode(ExpectedValue.self, from: Data(bodyString.utf8)),
+      ExpectedValue(status: 401, title: "401: Unauthorized")
+    )
   }
 }

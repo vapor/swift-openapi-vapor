@@ -35,14 +35,14 @@ extension Abort: @retroactive HTTPResponseConvertible {
       title: "\(identifier): \(reason)",
       status: Int(status.code)
     )
-    guard let encoder = try? ContentConfiguration.global.requireEncoder(for: .json) else {
-      // We don't have a great place to communicate a missing encoder here.
-      return nil
-    }
     var buffer = ByteBuffer()
     var headers = HTTPHeaders()
     do {
-      try encoder.encode(problem, to: &buffer, headers: &headers)
+      if let encoder = try? ContentConfiguration.global.requireEncoder(for: .json) {
+        try encoder.encode(problem, to: &buffer, headers: &headers)
+      } else {
+        try fallbackJSONEncoder.encode(problem, to: &buffer, headers: &headers)
+      }
     } catch {
       // We don't have a great place to communicate an encoding error here.
       return nil
@@ -51,11 +51,14 @@ extension Abort: @retroactive HTTPResponseConvertible {
   }
 }
 
-// https://datatracker.ietf.org/doc/html/rfc7807#section-3.1
+private let fallbackJSONEncoder: JSONEncoder = {
+  let encoder = JSONEncoder()
+  encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
+  return encoder
+}()
+
+// A subset of https://datatracker.ietf.org/doc/html/rfc7807#section-3.1
 private struct JSONProblem: Encodable {
-  var type: URI?
-  var title: String?
-  var status: Int?
-  var detail: String?
-  var instance: URI?
+  var title: String
+  var status: Int
 }

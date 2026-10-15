@@ -4,7 +4,7 @@ import Vapor
 
 // ...
 
-let app = Vapor.Application()
+let app = try await Vapor.Application()
 
 let transport = VaporTransport(routesBuilder: app)
 

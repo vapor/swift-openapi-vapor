@@ -11,176 +11,169 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Atomics
-import HTTPTypes
-import NIOHTTPTypesHTTP1
-import OpenAPIRuntime
-import Vapor
+public import HTTPTypes
+public import OpenAPIRuntime
+import RoutingKit
+public import Vapor
 
 public final class VaporTransport {
 
-  /// A routes builder with which to register request handlers.
-  internal var routesBuilder: any Vapor.RoutesBuilder
+    /// A routes builder with which to register request handlers.
+    internal var routesBuilder: any Vapor.RoutesBuilder
 
-  /// Creates a new transport.
-  /// - Parameter routesBuilder: A routes builder with which to register request handlers.
-  public init(routesBuilder: any Vapor.RoutesBuilder) {
-    self.routesBuilder = routesBuilder
-  }
+    /// The ceiling on a request body handed to a handler.
+    internal let maxBodySize: BodySizeLimit
+
+    /// Creates a new transport.
+    /// - Parameters:
+    ///   - routesBuilder: A routes builder with which to register request handlers.
+    ///   - maxBodySize: The largest request body to accept; beyond it the request is rejected with
+    ///     `413 Content Too Large`. Defaults to the application's `Routes/defaultMaxBodySize` of
+    ///     16 KB. Bodies stream, so the ceiling is checked as the handler reads — a declared
+    ///     `Content-Length` over it is refused up front, and a chunked body the handler never reads
+    ///     never trips it. A body middleware already collected is passed through as is.
+    public init(routesBuilder: any Vapor.RoutesBuilder, maxBodySize: BodySizeLimit = .default) {
+        self.routesBuilder = routesBuilder
+        self.maxBodySize = maxBodySize
+    }
 }
 
 extension VaporTransport: ServerTransport {
-  public func register(
-    _ handler:
-      @Sendable @escaping (
-        HTTPTypes.HTTPRequest, OpenAPIRuntime.HTTPBody?, OpenAPIRuntime.ServerRequestMetadata
-      ) async throws -> (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?),
-    method: HTTPRequest.Method,
-    path: String
-  ) throws {
-    self.routesBuilder.on(
-      HTTPMethod(method),
-      [PathComponent](path),
-      body: .stream
-    ) { vaporRequest in
-      let request = try HTTPTypes.HTTPRequest(vaporRequest)
-      let body = OpenAPIRuntime.HTTPBody(vaporRequest)
-      let requestMetadata = try OpenAPIRuntime.ServerRequestMetadata(
-        from: vaporRequest,
-        forPath: path
-      )
-      let res = try await handler(request, body, requestMetadata)
-      let response = Vapor.Response(response: res.0, body: res.1)
-      if let contentLength = res.0.headerFields.first(where: { $0.name == .contentLength }) {
-        response.headers.replaceOrAdd(name: .contentLength, value: contentLength.value)
-      }
-      return response
+    public func register(
+        _ handler:
+            @concurrent @Sendable @escaping (
+                HTTPTypes.HTTPRequest, OpenAPIRuntime.HTTPBody?, OpenAPIRuntime.ServerRequestMetadata
+            ) async throws -> (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?),
+        method: HTTPRequest.Method,
+        path: String
+    ) throws {
+        // The closure below is `@Sendable` and the transport is not, so read the value out here.
+        let maxBodySize = self.maxBodySize
+        self.routesBuilder.on(
+            method,
+            [PathComponent](path)
+        ) { vaporRequest in
+            let request = try HTTPTypes.HTTPRequest(vaporRequest)
+            let body = try VaporRequestBody(vaporRequest, maxBodySize: maxBodySize).httpBody
+            let requestMetadata = try OpenAPIRuntime.ServerRequestMetadata(
+                from: vaporRequest, forPath: path)
+            let res: (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?)
+            do {
+                res = try await handler(request, body, requestMetadata)
+            } catch let error as OpenAPIRuntime.ServerError
+                where (error.underlyingError as? Abort)?.status == .contentTooLarge
+            {
+                // Generated code wraps a failed body read in `ServerError`, which reaches the client as a 500.
+                throw error.underlyingError
+            }
+            var response = try Vapor.Response(response: res.0, body: res.1)
+            // `Response.init` derives Content-Length from the body; for HEAD the handler's value is the
+            // one that matters, and restoring it is only safe when there is no body to contradict it.
+            if res.1 == nil, let contentLength = res.0.headerFields[.contentLength] {
+                response.headers[.contentLength] = contentLength
+            }
+            return response
+        }
     }
-  }
 }
 
 enum VaporTransportError: Error {
-  case unsupportedHTTPMethod(String)
-  case duplicatePathParameter([String])
-  case missingRequiredPathParameter(String)
-  case multipleBodyIteration
+    case duplicatePathParameter([String])
+    case missingRequiredPathParameter(String)
 }
 
-extension [Vapor.PathComponent] {
-  init(_ path: String) {
-    self = path.split(
-      separator: "/",
-      omittingEmptySubsequences: true
-    ).map { parameter in
-      if parameter.first == "{", parameter.last == "}" {
-        return .parameter(String(parameter.dropFirst().dropLast()))
-      } else {
-        return .constant(String(parameter))
-      }
+extension [RoutingKit.PathComponent] {
+    init(_ path: String) {
+        self = path.split(
+            separator: "/",
+            omittingEmptySubsequences: true
+        ).map { segment in
+            let inner = segment.dropFirst().dropLast()
+            if segment.first == "{", segment.last == "}", !inner.contains("{"), !inner.contains("}") {
+                return .parameter(String(inner))
+            } else if segment.contains("{") {
+                // A mixed segment like `/file/{name}.zip` or `{name}.{ext}`, which `ServerTransport` allows. RoutingKit
+                // spells these `:` plus the template. A plain `{name}` route alongside still shadows it.
+                return .init(stringLiteral: ":\(segment)")
+            } else {
+                return .constant(String(segment))
+            }
+        }
     }
-  }
 }
 
 extension HTTPTypes.HTTPRequest {
-  init(_ vaporRequest: Vapor.Request) throws {
-    let headerFields: HTTPTypes.HTTPFields = .init(vaporRequest.headers, splitCookie: true)
-    let method = try HTTPTypes.HTTPRequest.Method(vaporRequest.method)
-    let queries = vaporRequest.url.query.map { "?\($0)" } ?? ""
-    self.init(
-      method: method,
-      scheme: vaporRequest.url.scheme,
-      authority: vaporRequest.url.host,
-      path: vaporRequest.url.path + queries,
-      headerFields: headerFields
-    )
-  }
-}
-
-extension OpenAPIRuntime.HTTPBody {
-  convenience init(_ vaporRequest: Vapor.Request) {
-    let contentLength = vaporRequest.headers.first(name: "content-length").map(Int.init)
-    self.init(
-      vaporRequest.body.map(\.readableBytesView),
-      length: contentLength?.map { .known(numericCast($0)) } ?? .unknown,
-      iterationBehavior: .single
-    )
-  }
+    init(_ vaporRequest: Vapor.Request) throws {
+        let queries = vaporRequest.url.query.map { "?\($0)" } ?? ""
+        self.init(
+            method: vaporRequest.method,
+            scheme: vaporRequest.url.scheme,
+            authority: vaporRequest.url.host,
+            path: vaporRequest.url.path + queries,
+            headerFields: vaporRequest.headers
+        )
+    }
 }
 
 extension OpenAPIRuntime.ServerRequestMetadata {
-  init(from vaporRequest: Vapor.Request, forPath path: String) throws {
-    self.init(pathParameters: try .init(from: vaporRequest, forPath: path))
-  }
+    init(from vaporRequest: Vapor.Request, forPath path: String) throws {
+        self.init(pathParameters: try .init(from: vaporRequest, forPath: path))
+    }
 }
 
 extension [String: Substring] {
-  init(from vaporRequest: Vapor.Request, forPath path: String) throws {
-    let keysAndValues = try [PathComponent](path).compactMap { component throws -> String? in
-      guard case .parameter(let parameter) = component else {
-        return nil
-      }
-      return parameter
-    }.map { parameter -> (String, Substring) in
-      guard let value = vaporRequest.parameters.get(parameter) else {
-        throw VaporTransportError.missingRequiredPathParameter(parameter)
-      }
-      return (parameter, Substring(value))
+    init(from vaporRequest: Vapor.Request, forPath path: String) throws {
+        let keysAndValues = try [PathComponent](path).flatMap { component -> [String] in
+            switch component {
+            case .parameter(let parameter):
+                return [parameter]
+            // A mixed segment carries its parameters inside the template, each stored under its own name.
+            case .partialParameter(_, _, let parameters):
+                return parameters.map(String.init)
+            case .constant, .anything, .catchall:
+                return []
+            }
+        }.map { parameter -> (String, Substring) in
+            guard let value = vaporRequest.parameters.get(parameter) else {
+                throw VaporTransportError.missingRequiredPathParameter(parameter)
+            }
+            return (parameter, Substring(value))
+        }
+        let pathParameterDictionary = try Dictionary(
+            keysAndValues,
+            uniquingKeysWith: { _, _ in
+                throw VaporTransportError.duplicatePathParameter(keysAndValues.map(\.0))
+            })
+        self = pathParameterDictionary
     }
-    let pathParameterDictionary = try Dictionary(
-      keysAndValues,
-      uniquingKeysWith: { _, _ in
-        throw VaporTransportError.duplicatePathParameter(keysAndValues.map(\.0))
-      })
-    self = pathParameterDictionary
-  }
 }
 
 extension Vapor.Response {
-  convenience init(response: HTTPTypes.HTTPResponse, body: OpenAPIRuntime.HTTPBody?) {
-    self.init(
-      status: .init(statusCode: response.status.code),
-      headers: .init(response.headerFields),
-      body: .init(body)
-    )
-  }
+    init(response: HTTPTypes.HTTPResponse, body: OpenAPIRuntime.HTTPBody?) throws {
+        self.init(
+            status: response.status,
+            headers: response.headerFields,
+            body: try .init(body)
+        )
+    }
 }
 
 extension Vapor.Response.Body {
-  init(_ body: OpenAPIRuntime.HTTPBody?) {
-    guard let body else {
-      self = .empty
-      return
-    }
-    /// Used to guard the body from being iterated multiple times.
-    /// https://github.com/vapor/vapor/issues/3002
-    let iterated = ManagedAtomic(false)
-    let stream: @Sendable (any Vapor.BodyStreamWriter) -> Void = { writer in
-      guard
-        iterated.compareExchange(
-          expected: false,
-          desired: true,
-          ordering: .relaxed
-        ).exchanged
-      else {
-        _ = writer.write(.error(VaporTransportError.multipleBodyIteration))
-        return
-      }
-      _ = writer.eventLoop.makeFutureWithTask {
-        do {
-          for try await chunk in body {
-            try await writer.write(.buffer(ByteBuffer(bytes: chunk))).get()
-          }
-          try await writer.write(.end).get()
-        } catch {
-          try await writer.write(.error(error)).get()
+    init(_ body: OpenAPIRuntime.HTTPBody?) throws {
+        guard let body else {
+            self = .empty
+            return
         }
-      }
+        let stream: @Sendable (borrowing any HTTPBodyWriter & ~Escapable) async throws -> Void = { writer in
+            for try await chunk in body {
+                try await writer.write(chunk)
+            }
+        }
+        switch body.length {
+        case .known(let count):
+            self = try .init(stream: stream, count: Int(clamping: count))
+        case .unknown:
+            self = .init(stream: stream)
+        }
     }
-    switch body.length {
-    case .known(let count):
-      self = .init(stream: stream, count: Int(clamping: count))
-    case .unknown:
-      self = .init(stream: stream)
-    }
-  }
 }

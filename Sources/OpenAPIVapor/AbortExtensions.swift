@@ -11,54 +11,59 @@
 //
 //===----------------------------------------------------------------------===//
 
-import HTTPTypes
-import NIOHTTPTypesHTTP1
-import OpenAPIRuntime
-import Vapor
+public import HTTPTypes
+public import OpenAPIRuntime
+public import Vapor
 
-// This @retroactive conformance is okay as it assumes that Vapor v4 will never gain
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
+
+// This @retroactive conformance is okay as it assumes that Vapor v5 will never gain
 // a direct dependency on Swift OpenAPI Runtime.
 // swift-format-ignore: AvoidRetroactiveConformances
 extension Abort: @retroactive HTTPResponseConvertible {
-  public var httpStatus: HTTPResponse.Status {
-    .init(code: Int(status.code))
-  }
-
-  public var httpHeaderFields: HTTPTypes.HTTPFields {
-    var headerFields: HTTPTypes.HTTPFields = .init(headers, splitCookie: false)
-    headerFields[.contentType] = "application/json"
-    return headerFields
-  }
-
-  public var httpBody: OpenAPIRuntime.HTTPBody? {
-    let problem = JSONProblem(
-      title: "\(identifier): \(reason)",
-      status: Int(status.code)
-    )
-    var buffer = ByteBuffer()
-    var headers = HTTPHeaders()
-    do {
-      if let encoder = try? ContentConfiguration.global.requireEncoder(for: .json) {
-        try encoder.encode(problem, to: &buffer, headers: &headers)
-      } else {
-        try fallbackJSONEncoder.encode(problem, to: &buffer, headers: &headers)
-      }
-    } catch {
-      // We don't have a great place to communicate an encoding error here.
-      return nil
+    public var httpStatus: HTTPResponse.Status {
+        status
     }
-    return .init(buffer.readableBytesView)
-  }
+
+    public var httpHeaderFields: HTTPTypes.HTTPFields {
+        var headers = headers
+        headers[.contentType] = "application/json"
+        return headers
+    }
+
+    public var httpBody: OpenAPIRuntime.HTTPBody? {
+        let problem = JSONProblem(
+            title: "\(identifier): \(reason)",
+            status: Int(status.code)
+        )
+        var buffer = Data()
+        var headers = HTTPFields()
+        do {
+            if let encoder = try? ContentConfiguration.default().requireEncoder(for: .json) {
+                try encoder.encode(problem, to: &buffer, headers: &headers, userInfo: [:])
+            } else {
+                try fallbackJSONEncoder.encode(problem, to: &buffer, headers: &headers, userInfo: [:])
+            }
+        } catch {
+            // We don't have a great place to communicate an encoding error here.
+            return nil
+        }
+        return .init(buffer)
+    }
 }
 
 private let fallbackJSONEncoder: JSONEncoder = {
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
-  return encoder
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
+    return encoder
 }()
 
 // A subset of https://datatracker.ietf.org/doc/html/rfc7807#section-3.1
 private struct JSONProblem: Encodable {
-  var title: String
-  var status: Int
+    var title: String
+    var status: Int
 }

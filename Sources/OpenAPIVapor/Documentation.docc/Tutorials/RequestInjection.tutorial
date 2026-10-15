@@ -1,5 +1,5 @@
 @Tutorial(time: 5) {
-    @XcodeRequirement(title: "Swift 5.9", destination: "https://developer.apple.com/download/applications/")
+    @XcodeRequirement(title: "Swift 6.4", destination: "https://developer.apple.com/download/applications/")
 
     @Intro(title: "Using `Request` in OpenAPI's APIProtocol") {
         This tutorial guides you through passing down the `Request` to the OpenAPI Vapor route handler
@@ -17,11 +17,11 @@
     }
 
     @Section(title: "Using a middleware to inject `Request` to the context of requests") {
-        Now you need to using an `AsyncMiddleware` which captures the request and injects it to the context of your requests using Swift's `TaskLocal`s.
+        Now you need to use a `Middleware` which captures the request and injects it to the context of your requests using Swift's `TaskLocal`s.
 
         @Steps {
             @Step {
-               Create an `AsyncMiddleware`.
+               Create a `Middleware`.
                @Code(name: "OpenAPIRequestInjectionMiddleware", file: request-injection.middleware.1.swift)
             }
             @Step {
@@ -53,6 +53,7 @@
             @Step {
                 Access the value of the `@TaskLocal` to retrieve the `Request`.
                 Then you can use it freely like with normal Vapor route handlers.
+                The body is the one exception: it is non-escapable and bound to the request's lifetime, so it cannot be read from here. Read it from the `HTTPBody` your handler is given instead.
                 @Code(name: "MyAPIProtocolImpl.swift", file: request-injection.api-protocol.2.swift)
             }
         }
